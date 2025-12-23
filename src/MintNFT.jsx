@@ -13,23 +13,35 @@ const MintNFT = () => {
 	const [file, setFile] = useState(null);
 	const [name, setName] = useState("");
 	const [status, setStatus] = useState("");
-	const [symbol, setSymbol] = useState("MNFT");
+	const [symbol, setSymbol] = useState("");
 	const [loading, setLoading] = useState(false);
+	const [description, setDescription] = useState("");
 
 	const handleMint = async () => {
-		if (!wallet.connected) return alert("Please connect your wallet first!");
-		if (!file || !name) return alert("Please provide an image and a name!");
+		if (!wallet.connected) return alert("Connect Wallet!");
 
 		setLoading(true);
-		setStatus("Uploading metadata to IPFS...");
+		setStatus("Preparing Mint Address...");
 
 		try {
-			// 1. Upload to Node Backend
+			// A. Setup Umi
+			const umi = createUmi("https://api.devnet.solana.com")
+				.use(walletAdapterIdentity(wallet))
+				.use(mplTokenMetadata());
+
+			// B. PRE-GENERATE the Mint Signer
+			const mint = generateSigner(umi);
+			const mintAddress = mint.publicKey.toString();
+
+			setStatus("Uploading to Pinata with Mint Address...");
+
+			// C. Upload to Backend (Pass the mintAddress)
 			const formData = new FormData();
 			formData.append("image", file);
 			formData.append("name", name);
-			formData.append("description", "Minted on my custom Solana Marketplace");
+			formData.append("description", description);
 			formData.append("symbol", symbol);
+			formData.append("mintAddress", mintAddress);
 
 			const res = await fetch(
 				"https://nft-mint-5je4.onrender.com/api/upload-metadata",
@@ -40,28 +52,16 @@ const MintNFT = () => {
 			);
 			const data = await res.json();
 
-			if (!data.success) throw new Error("Upload failed");
-			const uri = data.metadataURI;
-
-			setStatus("Minting on Solana...");
-
-			// 2. Mint with Umi
-			const umi = createUmi("https://api.devnet.solana.com")
-				.use(walletAdapterIdentity(wallet))
-				.use(mplTokenMetadata());
-
-			const mint = generateSigner(umi);
-
+			// D. Now Mint on-chain using that same signer
+			setStatus("Finalizing Mint on Solana...");
 			await createNft(umi, {
-				mint,
-				symbol: symbol,
+				mint, // Use the same signer we generated in step B
 				name: name,
-				uri: uri,
+				uri: data.metadataURI,
 				sellerFeeBasisPoints: percentAmount(0),
-				isMutable: false,
 			}).sendAndConfirm(umi);
 
-			setStatus(`✅ Success! Mint Address: ${mint.publicKey}`);
+			setStatus(`✅ Success! Mint Address: ${mintAddress}`);
 		} catch (err) {
 			console.error(err);
 			setStatus("❌ Error: " + err.message);
@@ -69,7 +69,6 @@ const MintNFT = () => {
 			setLoading(false);
 		}
 	};
-
 	return (
 		<div className="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 max-w-md w-full">
 			<h3 className="text-2xl font-bold mb-4 text-blue-400">Mint New NFT</h3>
@@ -99,7 +98,18 @@ const MintNFT = () => {
 						onChange={(e) => setSymbol(e.target.value)}
 					/>
 				</div>
-
+				<div>
+					<label className="block text-sm font-medium text-gray-400 mb-1">
+						NFT Description
+					</label>
+					<input
+						type="text"
+						className="w-full bg-gray-900 border border-gray-700 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none text-white"
+						placeholder="Super cool nft"
+						value={description}
+						onChange={(e) => setDescription(e.target.value)}
+					/>
+				</div>
 				<div>
 					<label className="block text-sm font-medium text-gray-400 mb-1">
 						Upload Image

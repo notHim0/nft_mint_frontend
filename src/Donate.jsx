@@ -6,6 +6,7 @@ import {
 	SystemProgram,
 	LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
+import { useLocation } from "react-router-dom";
 
 const Donate = () => {
 	const { connection } = useConnection();
@@ -13,6 +14,9 @@ const Donate = () => {
 	const [mintAddr, setMintAddr] = useState("");
 	const [amount, setAmount] = useState("");
 	const [loading, setLoading] = useState(false);
+	const location = useLocation();
+	const queryParams = new URLSearchParams(location.search);
+	const prefilledAddress = queryParams.get("address") || "";
 
 	const handleDonate = async () => {
 		if (!publicKey) return alert("Connect Wallet!");
